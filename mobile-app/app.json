@@ -1,0 +1,74 @@
+{
+  "expo": {
+    "name": "School Bus Tracker",
+    "slug": "schoolbustracking1",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "schoolbustracker",
+    "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Used to track the school bus location and notify parents",
+          "locationAlwaysPermission": "Used to track the school bus location and notify parents",
+          "locationWhenInUsePermission": "Used to track the school bus location and notify parents",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1C4E7A"
+        }
+      ],
+      "@maplibre/maplibre-react-native"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.schoolbustracker.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Used to track the school bus location and notify parents",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Used to track the school bus location and notify parents",
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.schoolbustracker.app",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiUrl": "http://192.168.0.158:8000",
+      "eas": {
+        "projectId": "45d1a53d-08c6-4e14-ad4a-376487117f7b"
+      }
+    }
+  }
+}

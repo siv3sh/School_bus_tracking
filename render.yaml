@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: school-bus-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: school_bus_tracking
+      - key: JWT_SECRET
+        generateValue: true
+      - key: USE_OSRM
+        value: "true"
+      - key: SCHOOL_NAME
+        value: Demo Public School
+      - key: SCHOOL_PHONE
+        value: "+91 90000 00000"
+      - key: SCHOOL_EMAIL
+        value: office@schoolbus.app
+      - key: SCHOOL_ADDRESS
+        value: Main Campus Gate
