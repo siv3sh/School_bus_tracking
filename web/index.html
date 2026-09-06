@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>School Bus Tracker</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="login-view" class="login-wrap">
+      <div class="login-card">
+        <h1>School Bus Tracker</h1>
+        <p class="muted">Sign in with your school account</p>
+        <label>Email</label>
+        <input id="email" type="email" autocomplete="username" value="parent1@schoolbus.app" />
+        <label>Password</label>
+        <input id="password" type="password" autocomplete="current-password" value="password123" />
+        <p id="login-error" class="error" hidden></p>
+        <button id="login-btn" type="button">Sign in</button>
+        <p class="hint">
+          parent1@ / driver@ / admin@ schoolbus.app — password123
+        </p>
+      </div>
+    </div>
+
+    <div id="app-view" class="app" hidden>
+      <header class="topbar">
+        <div>
+          <div class="brand">School Bus Tracker</div>
+          <div id="who" class="muted"></div>
+        </div>
+        <button id="logout-btn" class="ghost" type="button">Log out</button>
+      </header>
+      <nav id="tabs" class="tabs"></nav>
+      <main id="main"></main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

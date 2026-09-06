@@ -1,9 +1,11 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.database import close_db, get_db
 from app.routes import admin, auth, buses, location, parent
@@ -37,7 +39,7 @@ app = FastAPI(title="School Bus Tracking API", version="0.1.0", lifespan=lifespa
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,3 +55,16 @@ app.include_router(ws_endpoints.router)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _web_dir() -> Path | None:
+    backend_dir = Path(__file__).resolve().parent.parent
+    for candidate in (backend_dir / "web", backend_dir.parent / "web"):
+        if (candidate / "index.html").is_file():
+            return candidate
+    return None
+
+
+_WEB_DIR = _web_dir()
+if _WEB_DIR is not None:
+    app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")

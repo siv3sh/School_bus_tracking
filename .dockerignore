@@ -1,0 +1,11 @@
+.git
+.cursor
+mobile-app
+backend/.venv
+**/.venv
+**/__pycache__
+**/.env
+**/node_modules
+.mongo-data
+*.pyc
+._*
