@@ -37,8 +37,11 @@ export function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <View style={styles.mark}>
+        <Text style={styles.markText}>SB</Text>
+      </View>
       <Text style={styles.brand}>School Bus Tracker</Text>
-      <Text style={styles.sub}>Sign in with your school account</Text>
+      <Text style={styles.sub}>Live fleet tracking for schools, drivers, and families.</Text>
       <TextInput
         style={styles.input}
         autoCapitalize="none"
