@@ -11,6 +11,7 @@ from app.database import close_db, get_db
 from app.routes import admin, auth, buses, location, parent
 from app.services.location_service import mark_signal_lost_if_needed
 from app.websockets import endpoints as ws_endpoints
+from seed import seed as load_demo_seed
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,16 @@ async def _signal_lost_watcher() -> None:
         await asyncio.sleep(5)
 
 
+async def _ensure_demo_users() -> None:
+    if await get_db().users.count_documents({}) > 0:
+        return
+    logger.warning("No users in MongoDB; loading demo accounts")
+    await load_demo_seed(disconnect=False)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    await _ensure_demo_users()
     task = asyncio.create_task(_signal_lost_watcher())
     yield
     task.cancel()

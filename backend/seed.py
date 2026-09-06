@@ -17,7 +17,7 @@ STOPS = [
 ]
 
 
-async def seed() -> None:
+async def seed(*, disconnect: bool = True) -> None:
     db = get_db()
     await db.users.delete_many({})
     await db.routes.delete_many({})
@@ -136,7 +136,8 @@ async def seed() -> None:
     print("  parent1@schoolbus.app / password123")
     print("  parent2@schoolbus.app / password123")
     print(f"  bus_id={bus_id} route_id={route_id}")
-    await close_db()
+    if disconnect:
+        await close_db()
 
 
 if __name__ == "__main__":
