@@ -6,6 +6,7 @@ from bson import ObjectId
 
 from app.database import get_db
 from app.services.push_service import send_push_notifications
+from app.services.tenant import school_filter
 
 
 def is_school_stop(route: dict, stop: dict) -> bool:
@@ -27,13 +28,17 @@ async def notify_school_arrived(*, bus: dict, route: dict, stop: dict) -> int:
     db = get_db()
     bus_id = str(bus["_id"])
     trip_id = bus.get("current_trip_id")
-    students = await db.students.find({"route_id": str(route["_id"])}).to_list(500)
+    customer_id = bus.get("customer_id") or route.get("customer_id")
+    students = await db.students.find(school_filter(customer_id, {"route_id": str(route["_id"])})).to_list(500)
     parent_ids = {s["parent_id"] for s in students if s.get("parent_id")}
     if not parent_ids:
         return 0
 
     parents = await db.users.find(
-        {"_id": {"$in": [ObjectId(pid) for pid in parent_ids if ObjectId.is_valid(pid)]}}
+        school_filter(
+            customer_id,
+            {"_id": {"$in": [ObjectId(pid) for pid in parent_ids if ObjectId.is_valid(pid)]}},
+        )
     ).to_list(500)
 
     now = datetime.now(timezone.utc)
@@ -42,12 +47,15 @@ async def notify_school_arrived(*, bus: dict, route: dict, stop: dict) -> int:
     for parent in parents:
         parent_id = str(parent["_id"])
         existing = await db.alert_logs.find_one(
-            {
-                "bus_id": bus_id,
-                "trip_id": trip_id,
-                "parent_id": parent_id,
-                "type": "school_arrived",
-            }
+            school_filter(
+                customer_id,
+                {
+                    "bus_id": bus_id,
+                    "trip_id": trip_id,
+                    "parent_id": parent_id,
+                    "type": "school_arrived",
+                },
+            )
         )
         if existing:
             continue
@@ -72,6 +80,7 @@ async def notify_school_arrived(*, bus: dict, route: dict, stop: dict) -> int:
                 "type": "school_arrived",
                 "trip_id": trip_id,
                 "message": body,
+                "customer_id": customer_id,
             }
         )
         notified += 1

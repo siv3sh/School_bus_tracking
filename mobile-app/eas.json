@@ -15,7 +15,13 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://school-bus-tracking-tchy.onrender.com"
+      }
     },
     "production": {
       "autoIncrement": true

@@ -9,11 +9,13 @@ import { AdminAssignmentsScreen } from "../screens/admin/AdminAssignmentsScreen"
 import { AdminAuditScreen } from "../screens/admin/AdminAuditScreen";
 import { AdminDashboardScreen } from "../screens/admin/AdminDashboardScreen";
 import { AdminManageHomeScreen } from "../screens/admin/AdminManageHomeScreen";
+import { AdminPeopleScreen } from "../screens/admin/AdminPeopleScreen";
 import { AdminProfileScreen } from "../screens/admin/AdminProfileScreen";
 import { AdminRoutesScreen } from "../screens/admin/AdminRoutesScreen";
 
 export type AdminManageParamList = {
   ManageHome: undefined;
+  People: undefined;
   Routes: undefined;
   Assignments: undefined;
   Audit: undefined;
@@ -47,11 +49,12 @@ function AdminManageNavigator() {
   return (
     <ManageStack.Navigator>
       <ManageStack.Screen name="ManageHome" component={AdminManageHomeScreen} options={{ headerShown: false }} />
+      <ManageStack.Screen name="People" component={AdminPeopleScreen} options={{ title: "Drivers & parents" }} />
       <ManageStack.Screen name="Routes" component={AdminRoutesScreen} options={{ title: "Routes & stops" }} />
       <ManageStack.Screen
         name="Assignments"
         component={AdminAssignmentsScreen}
-        options={{ title: "Assignments" }}
+        options={{ title: "Buses & assignments" }}
       />
       <ManageStack.Screen name="Audit" component={AdminAuditScreen} options={{ headerShown: false }} />
     </ManageStack.Navigator>

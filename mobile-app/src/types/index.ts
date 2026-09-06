@@ -1,4 +1,4 @@
-export type Role = "driver" | "parent" | "admin";
+export type Role = "driver" | "parent" | "admin" | "customer_admin" | "product_admin";
 
 export type User = {
   id: string;
@@ -8,6 +8,8 @@ export type User = {
   phone?: string | null;
   expo_push_token?: string | null;
   alert_minutes_before?: number;
+  customer_id?: string | null;
+  status?: "invited" | "active" | "suspended";
 };
 
 export type Stop = {

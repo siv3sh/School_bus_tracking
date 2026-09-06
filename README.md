@@ -7,6 +7,7 @@ End-to-end **Phase 1** school bus tracker: parents watch a live bus map, drivers
 | Mobile | Expo SDK 57, TypeScript, React Navigation, MapLibre (Android) / Apple Maps (iOS) |
 | API | FastAPI, JWT roles, WebSockets, optional OSRM ETA |
 | Data | MongoDB (local or Atlas) |
+| Web UI | Static `web/` (served by FastAPI, or Vercel/Netlify) |
 
 Repo: [github.com/siv3sh/School_bus_tracking](https://github.com/siv3sh/School_bus_tracking)
 
@@ -55,11 +56,11 @@ Repo: [github.com/siv3sh/School_bus_tracking](https://github.com/siv3sh/School_b
 | Python 3.11+ | Backend |
 | Node 20+ | Mobile (Expo) |
 | MongoDB 6+ | Local `mongod` **or** Atlas |
-| Physical Android/iOS device | Same Wi‑Fi as your computer for local API |
-| Expo account | For EAS development builds |
+| Physical Android device | Preview APK talks to Render; local API still needs same Wi‑Fi |
+| Expo account | Only the person who **builds** the APK needs this |
 | macOS/Linux (or WSL) | Commands below use bash |
 
-**Important:** Expo Go is **not** enough. MapLibre + background GPS need an **EAS development client** APK/IPA.
+**Important:** Expo Go is **not** enough. Testers install a **preview APK** (one file, no Metro). Use an EAS **development** client only when you are coding.
 
 ---
 
@@ -170,9 +171,11 @@ Bus: **BUS-101** (linked to the demo driver).
 
 ---
 
-## 3. Configure the mobile app API URL
+## 3. Configure the mobile app API URL (local / dev client only)
 
-Phones cannot use `localhost`. Use your computer’s LAN IP.
+Preview APKs ignore this and use `EXPO_PUBLIC_API_URL` from `eas.json` (Render).
+
+Phones talking to a laptop cannot use `localhost`. Use your computer’s LAN IP.
 
 ```bash
 # macOS example
@@ -195,44 +198,47 @@ After changing `apiUrl`, reload the app (or rebuild if the value is baked into a
 
 ---
 
-## 4. Install and build the mobile app
+## 4. Share one Android APK (testers)
+
+This is the path for “install the app and log in.” JS is baked into the APK. No Metro, no Expo Go, no laptop IP.
+
+The preview profile already points at `https://school-bus-api.onrender.com`. Confirm that URL is healthy, then:
 
 ```bash
 cd mobile-app
 npm install
+npx eas-cli login
+npx eas build --profile preview --platform android
 ```
 
-### Create a development build (once per device platform)
+Send testers the APK link from the EAS page. They: enable **Install unknown apps** → install → open → log in with the seeded accounts.
+
+If your Render hostname is different, set it in `mobile-app/eas.json` under `build.preview.env.EXPO_PUBLIC_API_URL` and rebuild.
+
+### Development client (only when you are coding)
 
 ```bash
-npx eas-cli login
 npx eas build --profile development --platform android
 ```
 
-For iOS (device):
-
-```bash
-npx eas build --profile development --platform ios
-```
-
-Install the APK/IPA from the EAS build page onto the phone.
-
-### Start Metro
-
-Backend and Mongo must already be running.
+Then keep Metro running:
 
 ```bash
 cd mobile-app
 npx expo start --dev-client
 ```
 
-Open the **dev client** app on the phone (same Wi‑Fi). Scan the QR code or enter the Metro URL.
+Point `app.json` `extra.apiUrl` at your LAN IP. Phone and computer must be on the same Wi‑Fi.
+
+iOS still needs an Apple Developer account (TestFlight / device). Android APK is the easy share path.
 
 ---
 
 ## 5. End-to-end test (two phones)
 
-Keep on your Mac:
+With a **preview APK**, skip Metro. Both phones just need internet and the Render API awake.
+
+For a **development client**, keep on your Mac:
 
 1. `mongod`
 2. `uvicorn ... --host 0.0.0.0 --port 8000`
@@ -317,7 +323,7 @@ Interactive docs: `/docs`
 
 1. Create MongoDB Atlas; get `MONGODB_URI`.
 2. In [Render](https://render.com), use **Blueprint** with this repo’s `render.yaml`, or create a Docker web service with:
-   - Context: `backend/`
+   - Context: repo root (`.`)
    - Dockerfile: `backend/Dockerfile`
    - Health check: `/health`
 3. Set env vars at least:
@@ -334,14 +340,32 @@ Interactive docs: `/docs`
    PYTHONPATH=. python seed.py
    ```
 
-6. Point `mobile-app/app.json` → `"apiUrl": "https://YOUR-SERVICE.onrender.com"` and reload/rebuild the app.
+6. Preview APK already uses `EXPO_PUBLIC_API_URL=https://school-bus-api.onrender.com`. If your hostname differs, update `mobile-app/eas.json` and rebuild.
+
+7. Redeploy the API so it includes `web/`. Testers can then open the same host in a browser (no APK):
+   `https://school-bus-api.onrender.com/`
+
+### Web UI (parents / admin / driver demo)
+
+The site in `web/` talks to the same FastAPI + WebSockets. FastAPI serves it at `/` after you redeploy.
+
+- Parent: live map, boarded, alerts
+- Admin: fleet map + alerts
+- Driver: start trip and tap the map to send GPS (browser demo; real background GPS is still the APK)
+
+Local UI while the API runs on `:8000`:
+
+```bash
+open http://127.0.0.1:8000/
+```
+
+Or host `web/` on Vercel/Netlify. Same-origin is already handled when FastAPI serves the files. A separate static host should call `https://school-bus-api.onrender.com` (automatic unless you open the UI on ports 3000/5173/5500, which default to local `:8000`). Override with `?api=https://school-bus-api.onrender.com`.
 
 ### Local Docker API
 
 ```bash
-cd backend
-docker build -t school-bus-api .
-docker run --env-file .env -p 8000:8000 school-bus-api
+docker build -t school-bus-api -f backend/Dockerfile .
+docker run --env-file backend/.env -p 8000:8000 school-bus-api
 ```
 
 ---
@@ -354,7 +378,7 @@ docker run --env-file .env -p 8000:8000 school-bus-api
 | Parent map never moves | Driver must **Start Trip** and send GPS / Simulate **Send**; parent: pull refresh or wait ~5s; try **Show bus + stop** |
 | Bus far from blue route | Demo stops are near **Bangalore**; real GPS elsewhere looks distant — use **Simulate GPS** on the demo stops |
 | MapLibre `Unable to parse resourceUrl` | Use latest `AppMapView` (RasterSource + empty style, no glyph text layers); reload app |
-| Expo Go / maps / background GPS fail | Use EAS **development** build, not Expo Go |
+| Expo Go / maps / background GPS fail | Use the **preview** APK (testers) or EAS **development** client (coding), not Expo Go |
 | Boarded checkbox only on parent | Intentional — parents confirm boarding; driver does not list student checkboxes |
 | No school arrival | Mark stops until **School Gate**, or drive/simulate near the last stop (~150 m) |
 | Seed emails rejected | Use `@schoolbus.app` accounts from seed (not `@school.test`) |

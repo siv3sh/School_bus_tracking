@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,7 +12,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import * as Location from "expo-location";
 
+import {
+  AppMapView,
+  regionFromCoords,
+  type AppMapMarker,
+  type LatLng,
+  type MapCameraMode,
+} from "../../components/AppMapView";
 import { useAuth } from "../../context/AuthContext";
 import { useNetwork } from "../../context/NetworkContext";
 import { useSockets } from "../../context/SocketContext";
@@ -28,6 +36,18 @@ import {
 } from "../../services/locationService";
 import type { BusSocket } from "../../services/socketService";
 import type { Bus, Route, Stop } from "../../types";
+import {
+  etaMinutesFromDistance,
+  formatDistanceM,
+  formatEtaMinutes,
+  haversineMeters,
+} from "../../utils/geo";
+
+type LiveLoc = { lat: number; lng: number; speed: number | null };
+
+function isValidCoord(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
 
 export function DriverHomeScreen() {
   const { user } = useAuth();
@@ -45,6 +65,10 @@ export function DriverHomeScreen() {
   const [message, setMessage] = useState("");
   const [pendingTime, setPendingTime] = useState<string | null>(null);
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [liveLoc, setLiveLoc] = useState<LiveLoc | null>(null);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [cameraMode, setCameraMode] = useState<MapCameraMode>("overview");
+  const [mapEpoch, setMapEpoch] = useState(0);
   const socketRef = useRef<BusSocket | null>(null);
 
   const refresh = useCallback(async () => {
@@ -54,6 +78,20 @@ export function DriverHomeScreen() {
       setRoute(data.route);
       setNextStop(data.next_stop ?? null);
       setTracking(Boolean(data.bus.trip_active));
+      if (
+        data.bus.current_lat != null &&
+        data.bus.current_lng != null &&
+        isValidCoord(data.bus.current_lat, data.bus.current_lng)
+      ) {
+        setLiveLoc((prev) =>
+          prev ?? {
+            lat: data.bus.current_lat!,
+            lng: data.bus.current_lng!,
+            speed: null,
+          },
+        );
+      }
+      setSelectedStopId((prev) => prev ?? data.next_stop?.stop_id ?? null);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Could not load bus");
     } finally {
@@ -73,13 +111,92 @@ export function DriverHomeScreen() {
     }
   }, [isOnline, tracking]);
 
+  // Poll GPS pending point → live stop distances / map pin
   useEffect(() => {
-    const id = setInterval(async () => {
+    const tick = async () => {
       const p = await loadPendingPoint();
       setPendingTime(p?.recorded_at ?? null);
-    }, 2000);
+      if (p && isValidCoord(p.lat, p.lng)) {
+        setLiveLoc({ lat: p.lat, lng: p.lng, speed: p.speed ?? null });
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1500);
     return () => clearInterval(id);
   }, []);
+
+  const sortedStops = useMemo(
+    () => [...(route?.stops || [])].sort((a, b) => a.sequence_number - b.sequence_number),
+    [route?.stops],
+  );
+
+  const stopProgress = useMemo(() => {
+    return sortedStops.map((s) => {
+      if (!liveLoc) {
+        return { stop: s, distanceM: null as number | null, etaMin: null as number | null };
+      }
+      const distanceM = haversineMeters(liveLoc.lat, liveLoc.lng, s.lat, s.lng);
+      const etaMin = etaMinutesFromDistance(distanceM, liveLoc.speed);
+      return { stop: s, distanceM, etaMin };
+    });
+  }, [sortedStops, liveLoc]);
+
+  const routeCoords: LatLng[] = useMemo(
+    () => sortedStops.map((s) => ({ latitude: s.lat, longitude: s.lng })),
+    [sortedStops],
+  );
+
+  const markers: AppMapMarker[] = useMemo(() => {
+    const list: AppMapMarker[] = sortedStops.map((s) => {
+      const isNext = nextStop?.stop_id === s.stop_id;
+      const isSelected = selectedStopId === s.stop_id;
+      return {
+        id: s.stop_id,
+        lat: s.lat,
+        lng: s.lng,
+        title: `${s.sequence_number}. ${s.name}`,
+        type: "stop",
+        color: s.reached ? "#8A96A3" : isSelected ? "#C46A1B" : isNext ? "#1C4E7A" : "#2F5D8C",
+        prominent: isSelected || isNext,
+      };
+    });
+    if (liveLoc) {
+      list.push({
+        id: "bus-live",
+        lat: liveLoc.lat,
+        lng: liveLoc.lng,
+        title: bus?.bus_number || "Bus",
+        type: "bus",
+        color: tracking ? "#1B7F4E" : "#8A96A3",
+        prominent: true,
+      });
+    }
+    return list;
+  }, [sortedStops, nextStop, selectedStopId, liveLoc, bus?.bus_number, tracking]);
+
+  const followCoordinate = useMemo(() => {
+    if (cameraMode === "follow" && liveLoc) {
+      return { latitude: liveLoc.lat, longitude: liveLoc.lng };
+    }
+    const sel = sortedStops.find((s) => s.stop_id === selectedStopId);
+    if (sel) return { latitude: sel.lat, longitude: sel.lng };
+    if (liveLoc) return { latitude: liveLoc.lat, longitude: liveLoc.lng };
+    return null;
+  }, [cameraMode, liveLoc, selectedStopId, sortedStops]);
+
+  const mapRegion = useMemo(() => {
+    const coords: LatLng[] = [...routeCoords];
+    if (liveLoc) coords.push({ latitude: liveLoc.lat, longitude: liveLoc.lng });
+    return regionFromCoords(coords.length ? coords : [{ latitude: 12.9716, longitude: 77.5946 }], 1.5);
+  }, [routeCoords, liveLoc]);
+
+  const nextProgress = stopProgress.find((p) => p.stop.stop_id === nextStop?.stop_id);
+
+  const selectStop = (stop: Stop) => {
+    setSelectedStopId(stop.stop_id);
+    setCameraMode("overview");
+    setMapEpoch((n) => n + 1);
+  };
 
   const onStart = async () => {
     if (!bus) return;
@@ -97,7 +214,19 @@ export function DriverHomeScreen() {
       socketRef.current = openDriverSocket(bus.id);
       setLocationPublishDeps({ isOnline, socket: socketRef.current });
       await startTracking(bus.id);
+      try {
+        const cur = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        setLiveLoc({
+          lat: cur.coords.latitude,
+          lng: cur.coords.longitude,
+          speed: cur.coords.speed != null && cur.coords.speed >= 0 ? cur.coords.speed : null,
+        });
+      } catch {
+        // watchPosition will fill in
+      }
       setTracking(true);
+      setCameraMode("follow");
+      setMapEpoch((n) => n + 1);
       Vibration.vibrate(400);
       await refresh();
       setMessage("Trip started — parents can see your live location now.");
@@ -226,10 +355,75 @@ export function DriverHomeScreen() {
               </View>
             </View>
 
+            {sortedStops.length > 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.cardLabel}>Live route map</Text>
+                <Text style={styles.mapHint}>
+                  Green = your bus · Orange = selected stop · Blue = next stop
+                </Text>
+                <View style={styles.mapBox}>
+                  <AppMapView
+                    key={`driver-map-${mapEpoch}`}
+                    style={StyleSheet.absoluteFill}
+                    initialRegion={mapRegion}
+                    followCoordinate={followCoordinate}
+                    cameraMode={cameraMode}
+                    markers={markers}
+                    routeCoords={routeCoords}
+                  />
+                </View>
+                <View style={styles.camRow}>
+                  <Pressable
+                    style={[styles.camChip, cameraMode === "follow" && styles.camChipActive]}
+                    onPress={() => {
+                      setCameraMode("follow");
+                      setMapEpoch((n) => n + 1);
+                    }}
+                    disabled={!liveLoc}
+                  >
+                    <Text
+                      style={[styles.camChipText, cameraMode === "follow" && styles.camChipTextActive]}
+                    >
+                      Follow bus
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.camChip, cameraMode === "overview" && styles.camChipActive]}
+                    onPress={() => {
+                      setCameraMode("overview");
+                      setMapEpoch((n) => n + 1);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.camChipText,
+                        cameraMode === "overview" && styles.camChipTextActive,
+                      ]}
+                    >
+                      Show route
+                    </Text>
+                  </Pressable>
+                </View>
+                {!liveLoc ? (
+                  <Text style={styles.muted}>
+                    Start the trip to show your live position and distance to each stop.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
             {nextStop ? (
               <View style={styles.card}>
                 <Text style={styles.cardLabel}>Next stop</Text>
                 <Text style={styles.cardTitle}>{nextStop.name}</Text>
+                {nextProgress?.distanceM != null ? (
+                  <Text style={styles.liveEta}>
+                    {formatDistanceM(nextProgress.distanceM)} ·{" "}
+                    {formatEtaMinutes(nextProgress.etaMin)}
+                  </Text>
+                ) : (
+                  <Text style={styles.muted}>Waiting for GPS…</Text>
+                )}
                 <Pressable
                   style={[styles.markBtn, busy && styles.btnDisabled]}
                   onPress={onMarkStop}
@@ -270,20 +464,42 @@ export function DriverHomeScreen() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.cardLabel}>Stops on this route</Text>
-              {(route?.stops || []).length === 0 ? (
+              <Text style={styles.cardLabel}>Stops — live distance</Text>
+              {stopProgress.length === 0 ? (
                 <Text style={styles.muted}>No stops configured yet.</Text>
               ) : (
-                (route?.stops || [])
-                  .slice()
-                  .sort((a, b) => a.sequence_number - b.sequence_number)
-                  .map((s, i) => (
-                    <View key={s.stop_id} style={styles.stopRow}>
+                stopProgress.map(({ stop: s, distanceM, etaMin }, i) => {
+                  const isNext = nextStop?.stop_id === s.stop_id;
+                  const active = selectedStopId === s.stop_id;
+                  return (
+                    <Pressable
+                      key={s.stop_id}
+                      style={[
+                        styles.stopRow,
+                        active && styles.stopRowActive,
+                        isNext && styles.stopRowNext,
+                      ]}
+                      onPress={() => selectStop(s)}
+                    >
                       <Text style={styles.stopIndex}>{i + 1}</Text>
-                      <Text style={styles.stopName}>{s.name}</Text>
-                      {s.reached ? <Text style={styles.reachedTag}>Reached</Text> : null}
-                    </View>
-                  ))
+                      <View style={styles.stopBody}>
+                        <Text style={styles.stopName}>{s.name}</Text>
+                        {s.reached ? (
+                          <Text style={styles.reachedTag}>Reached</Text>
+                        ) : distanceM != null ? (
+                          <Text style={styles.stopMeta}>
+                            {formatDistanceM(distanceM)} · {formatEtaMinutes(etaMin)}
+                            {isNext ? " · next" : ""}
+                          </Text>
+                        ) : (
+                          <Text style={styles.stopMeta}>
+                            {isNext ? "Next · " : ""}Tap after starting trip for live ETA
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })
               )}
             </View>
 
@@ -301,6 +517,7 @@ export function DriverHomeScreen() {
 
             <Text style={styles.help}>
               Starting a trip turns on GPS (including background) so parents can follow the bus live.
+              Your map updates distance and ETA to each stop as you move.
             </Text>
 
             <Pressable
@@ -360,6 +577,26 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 4,
   },
+  mapHint: { color: "#8A96A3", fontSize: 12, marginBottom: 4 },
+  mapBox: {
+    height: 240,
+    backgroundColor: "#DCE3EA",
+    borderWidth: 1,
+    borderColor: "#C9D2DC",
+    overflow: "hidden",
+  },
+  camRow: { flexDirection: "row", gap: 8 },
+  camChip: {
+    borderWidth: 1,
+    borderColor: "#C9D2DC",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  camChipActive: { borderColor: "#1C4E7A", backgroundColor: "#E8F1F8" },
+  camChipText: { color: "#5A6A7A", fontWeight: "600", fontSize: 13 },
+  camChipTextActive: { color: "#1C4E7A" },
+  liveEta: { fontSize: 16, fontWeight: "700", color: "#1B7F4E" },
   markBtn: {
     marginTop: 4,
     backgroundColor: "#1C4E7A",
@@ -383,7 +620,17 @@ const styles = StyleSheet.create({
   emergencyBtnText: { fontWeight: "700", color: "#fff", fontSize: 15 },
   presetHint: { color: "#8A6A3A", fontSize: 13 },
   presetHintLight: { color: "rgba(255,255,255,0.85)", fontSize: 13 },
-  stopRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  stopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  stopRowActive: { borderColor: "#C46A1B", backgroundColor: "#FFF8F0" },
+  stopRowNext: { backgroundColor: "#F0F6FB" },
   stopIndex: {
     width: 24,
     height: 24,
@@ -395,7 +642,9 @@ const styles = StyleSheet.create({
     color: "#1C4E7A",
     overflow: "hidden",
   },
-  stopName: { flex: 1, color: "#152433", fontSize: 15, fontWeight: "500" },
+  stopBody: { flex: 1, gap: 2 },
+  stopName: { color: "#152433", fontSize: 15, fontWeight: "600" },
+  stopMeta: { color: "#5A6A7A", fontSize: 13 },
   reachedTag: { color: "#1B7F4E", fontSize: 12, fontWeight: "700" },
   primaryBtn: { paddingVertical: 16, alignItems: "center" },
   btnGo: { backgroundColor: "#1B7F4E" },

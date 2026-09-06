@@ -12,7 +12,7 @@ import { AppMapView, regionFromCoords, type AppMapMarker, type LatLng } from "..
 import { useNetwork } from "../../context/NetworkContext";
 import { useSockets } from "../../context/SocketContext";
 import { api } from "../../services/api";
-import { setLocationPublishDeps } from "../../services/locationService";
+import { savePendingPoint, setLocationPublishDeps } from "../../services/locationService";
 import type { Bus, Stop } from "../../types";
 
 /**
@@ -117,15 +117,18 @@ export function SimulateLocationScreen() {
     }
     setBusy(true);
     try {
-      // REST-only for simulate — avoids driver WS + MapLibre fighting on the same tick
-      await api.postLatestLocation({
+      const point = {
         bus_id: bus.id,
         lat: latitude,
         lng: longitude,
         speed: 8,
         recorded_at: new Date().toISOString(),
-      });
-      setHint(`Sent ${latitude.toFixed(4)}, ${longitude.toFixed(4)} — check parent Track.`);
+      };
+      // Keep local pending so Driver Home live distances update after simulate
+      await savePendingPoint(point);
+      // REST-only for simulate — avoids driver WS + MapLibre fighting on the same tick
+      await api.postLatestLocation(point);
+      setHint(`Sent ${latitude.toFixed(4)}, ${longitude.toFixed(4)} — check parent Track / driver map.`);
     } catch (e) {
       setHint(e instanceof Error ? e.message : "Send failed");
     } finally {

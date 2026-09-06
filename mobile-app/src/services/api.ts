@@ -12,6 +12,7 @@ import type {
 } from "../types";
 
 const TOKEN_KEY = "auth_token";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 let authToken: string | null = null;
 
@@ -38,11 +39,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
   const url = `${API_URL}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error(`Cannot reach API at ${API_URL}. Is the backend running on your Wi‑Fi?`);
+    res = await fetch(url, { ...options, headers, signal: controller.signal });
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === "AbortError";
+    if (aborted) {
+      throw new Error(
+        `No response from ${API_URL} after ${REQUEST_TIMEOUT_MS / 1000}s. This APK may be pointing at a dead server.`,
+      );
+    }
+    throw new Error(`Cannot reach API at ${API_URL}. Check the phone’s network and the baked-in server URL.`);
+  } finally {
+    clearTimeout(timer);
   }
 
   const text = await res.text();
@@ -128,6 +139,22 @@ export const api = {
   updateRoute: (routeId: string, body: { name: string; stops: Route["stops"]; schedule?: string }) =>
     request<Route>(`/api/admin/routes/${routeId}`, { method: "PUT", body: JSON.stringify(body) }),
   listDrivers: () => request<User[]>("/api/admin/drivers"),
+  listSchoolUsers: () => request<User[]>("/api/school/users"),
+  createSchoolUser: (body: {
+    name: string;
+    email: string;
+    role: "driver" | "parent";
+    phone?: string;
+    password?: string;
+  }) =>
+    request<{ user: User; invite_token?: string | null; invite_expires_at?: string | null }>("/api/school/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  createBus: (body: { bus_number: string; driver_id?: string | null; route_id?: string | null }) =>
+    request<Bus>("/api/admin/buses", { method: "POST", body: JSON.stringify(body) }),
+  createStudent: (body: { name: string; parent_id: string; route_id: string; stop_id: string }) =>
+    request<ChildBundle["student"]>("/api/admin/students", { method: "POST", body: JSON.stringify(body) }),
   assignBus: (busId: string, body: { driver_id?: string | null; route_id?: string | null }) =>
     request<Bus>(`/api/admin/buses/${busId}/assign`, { method: "PUT", body: JSON.stringify(body) }),
   adminAlerts: () => request<AlertLog[]>("/api/admin/alerts"),

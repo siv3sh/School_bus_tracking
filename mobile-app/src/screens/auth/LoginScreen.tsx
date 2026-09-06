@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../context/AuthContext";
+import { API_URL } from "../../config/env";
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -75,9 +76,8 @@ export function LoginScreen() {
       <Pressable style={styles.button} onPress={onSubmit} disabled={busy}>
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
       </Pressable>
-      <Text style={styles.hint}>
-        Seeded: driver@ / parent1@ / admin@ schoolbus.app — password123
-      </Text>
+      <Text style={styles.hint}>Authorized school accounts only.</Text>
+      <Text style={styles.host}>{API_URL.replace(/^https?:\/\//, "")}</Text>
     </KeyboardAvoidingView>
   );
 }
@@ -89,6 +89,16 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: "#F7F4EF",
   },
+  mark: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#1C4E7A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  markText: { color: "#fff", fontWeight: "700", letterSpacing: 0.4 },
   brand: { fontSize: 28, fontWeight: "700", color: "#1C2B3A", marginBottom: 6 },
   sub: { color: "#5A6A7A", marginBottom: 24 },
   input: {
@@ -128,4 +138,5 @@ const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   error: { color: "#A32020", marginBottom: 8 },
   hint: { marginTop: 20, color: "#7A8694", fontSize: 12 },
+  host: { marginTop: 6, color: "#9AA6B2", fontSize: 11 },
 });

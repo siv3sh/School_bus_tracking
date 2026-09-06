@@ -13,7 +13,12 @@ export function AdminManageHomeScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.wrap}>
         <Text style={styles.title}>Manage</Text>
-        <Text style={styles.sub}>Routes, stops, and who drives which bus.</Text>
+        <Text style={styles.sub}>People, buses, routes, and who drives which bus.</Text>
+
+        <Pressable style={styles.card} onPress={() => navigation.navigate("People")}>
+          <Text style={styles.cardTitle}>Drivers & parents</Text>
+          <Text style={styles.cardBody}>Create driver and parent logins. Optionally assign a child to a stop.</Text>
+        </Pressable>
 
         <Pressable style={styles.card} onPress={() => navigation.navigate("Routes")}>
           <Text style={styles.cardTitle}>Routes & stops</Text>
@@ -21,8 +26,8 @@ export function AdminManageHomeScreen() {
         </Pressable>
 
         <Pressable style={styles.card} onPress={() => navigation.navigate("Assignments")}>
-          <Text style={styles.cardTitle}>Driver assignments</Text>
-          <Text style={styles.cardBody}>Link drivers and routes to each bus.</Text>
+          <Text style={styles.cardTitle}>Buses & assignments</Text>
+          <Text style={styles.cardBody}>Add buses, then link a driver and route to each one.</Text>
         </Pressable>
 
         <Pressable style={styles.card} onPress={() => navigation.navigate("Audit")}>
