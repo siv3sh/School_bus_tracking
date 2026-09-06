@@ -38,8 +38,9 @@ body {
   padding: 20px;
 }
 
-.login-card {
+form.login-card {
   width: min(420px, 100%);
+  margin: 0;
 }
 
 h1 {

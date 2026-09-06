@@ -1,22 +1,40 @@
 const TOKEN_KEY = "sbt_token";
 const USER_KEY = "sbt_user";
 
-const RENDER_API = "https://school-bus-api.onrender.com";
+const LIVE_API = "https://school-bus-tracking-tchy.onrender.com";
 const STATIC_PORTS = new Set(["3000", "5173", "5500", "8080", "8081"]);
 
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 function apiBase() {
+  try {
+    const saved = localStorage.getItem("sbt_api");
+    if (saved && saved.includes("school-bus-api.onrender.com")) {
+      localStorage.removeItem("sbt_api");
+    } else if (saved) {
+      return saved.replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("api");
   if (fromQuery) return fromQuery.replace(/\/$/, "");
-  const saved = localStorage.getItem("sbt_api");
-  if (saved) return saved.replace(/\/$/, "");
   const host = location.hostname;
+  if (host.endsWith("onrender.com")) return location.origin;
   if (host === "localhost" || host === "127.0.0.1") {
     if (STATIC_PORTS.has(location.port)) return "http://127.0.0.1:8000";
     return location.origin;
   }
-  if (host.endsWith("onrender.com")) return location.origin;
-  return RENDER_API;
+  return LIVE_API;
 }
 
 function wsBase() {
@@ -24,7 +42,7 @@ function wsBase() {
 }
 
 let token = localStorage.getItem(TOKEN_KEY);
-let user = JSON.parse(localStorage.getItem(USER_KEY) || "null");
+let user = readJson(USER_KEY, null);
 let socket = null;
 let map = null;
 let markersLayer = null;
@@ -108,6 +126,11 @@ function destroyMap() {
 function ensureMap(center) {
   const el = document.getElementById("map");
   if (!el) return;
+  if (typeof L === "undefined") {
+    el.innerHTML =
+      '<p class="muted" style="padding:16px">Map library did not load. Tracking still works in the list above.</p>';
+    return;
+  }
   if (!map) {
     map = L.map(el).setView(center, 14);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -244,7 +267,8 @@ tabs.addEventListener("click", (event) => {
   if (btn.dataset.tab === "drive") loadDriver();
 });
 
-document.getElementById("login-btn").addEventListener("click", async () => {
+document.getElementById("login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
   loginError.hidden = true;
   const btn = document.getElementById("login-btn");
   btn.disabled = true;
@@ -262,7 +286,7 @@ document.getElementById("login-btn").addEventListener("click", async () => {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     showApp();
   } catch (err) {
-    loginError.textContent = err.message;
+    loginError.textContent = `${err.message} (${apiBase()})`;
     loginError.hidden = false;
   } finally {
     btn.disabled = false;
@@ -503,5 +527,20 @@ async function loadDriver() {
   paint(bus);
 }
 
-if (token && user) showApp();
-else showLogin();
+async function boot() {
+  if (token && user) {
+    try {
+      user = await request("/api/auth/me");
+      showApp();
+      return;
+    } catch {
+      token = null;
+      user = null;
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
+  }
+  showLogin();
+}
+
+boot();
